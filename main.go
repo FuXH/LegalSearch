@@ -27,6 +27,10 @@ func HomePage(ctx *gin.Context) {
 	ctx.HTML(http.StatusOK, "index.html", gin.H{})
 }
 
+func ContentPage(ctx *gin.Context) {
+	ctx.HTML(http.StatusOK, "content.html", gin.H{})
+}
+
 func main() {
 	// init
 	if err := InitConnect(); err != nil {
@@ -37,10 +41,11 @@ func main() {
 	config := conf.GetConfig()
 	r := gin.Default()
 	r.LoadHTMLGlob("./html/template/*")
-	r.StaticFS("/static", http.Dir("./html/assets"))
+	r.StaticFS("/assets", http.Dir("./html/assets"))
 
 	r.GET("/login", LoginPage)
 	r.GET("/home", HomePage)
+	r.GET("/content", ContentPage)
 
 	r.GET("/api/queryByCondition", logic.QueryByCondition)
 	r.GET("/api/query", logic.Query)
