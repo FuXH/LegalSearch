@@ -1,0 +1,6 @@
+server:
+  port: 12342
+
+elasticsearch:
+  address:
+    - http://127.0.0.1:9200
