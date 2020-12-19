@@ -25,56 +25,6 @@ type UpdateRsp struct {
 	Status            string  `form:"status"`
 }
 
-// 法律文书的json数据
-type LegalDoc struct {
-	DefendantInfo []DefendantIndo `json:"defendant_info"` // 被告
-	PlaintiffInfo []PlaintiffInfo `json:"plaintiff_info"` // 原告
-	TrialJudge    string          `json:"judge"`          // 审理法官
-	TrialYear     string          `json:"year"`           // 审理年份
-	TrialTime     string          `json:"wenshu_time"`    // 审理具体时间
-	TrialArea     string          `json:"area"`           // 审理地区
-	TrialCourt    string          `json:"court"`          // 审理法院
-	Summarys      []Summary       `json:"case_summary"`   // 文书简介
-	InstrumentId  string          `json:"wenshu_id_2"`    // 法律文书ID
-	Content       string          `json:"wenshu_content"` // 原文
-	CaseId        string          `json:"case_id"`        // 案件id
-	CaseType      string          `json:"case_type"`      // 案件类型
-	// 费用相关
-	FeeMedical     FeeInfo `json:"fee_medical"`
-	FeeMess        FeeInfo `json:"fee_mess"`
-	FeeNurse       FeeInfo `json:"fee_nurse"`
-	FeeNutrition   FeeInfo `json:"fee_nutrition"`
-	FeePostCure    FeeInfo `json:"fee_post_cure"`
-	FeeLossWorking FeeInfo `json:"fee_loss_working"`
-	FeeTrffic      FeeInfo `json:"fee_trffic"`
-	// 结构体不明确，预留
-	//FeeDisable
-	//FeeDeath
-	//FeeBury
-	//FeeLife
-	//FeeTrafficForProcessBury
-	//FeeLossWorkingForProcessBury
-	//FeeMind
-	//FeeAppraise
-}
-type DefendantIndo struct {
-	Defendant      string `json:"defendant"`
-	DefendantAgent string `json:"defendant_agent"`
-	LawFirm        string `json:"law_firm"`
-}
-type PlaintiffInfo struct {
-	Plaintiff      string `json:"plaintiff"`
-	PlaintiffAgent string `json:"plaintiff_agent"`
-	LawFirm        string `json:"law_firm"`
-}
-type Summary struct {
-	DisputeFocus  string   `json:"controversy"` // 争议焦点
-	IsWin         string   `json:"judgement"`   // 是否胜诉
-	InuseLaw      []string `json:"cause"`       // 常用法条
-	JudgeArgument []string `json:"basis"`       // 法官观点
-	Evidence      []string `json:"evidence"`    // 证据建议
-}
-
 func Update(ctx *gin.Context) {
 	status := "fail"
 	instrumentNumber := 0
@@ -105,6 +55,7 @@ func Update(ctx *gin.Context) {
 	// 读取指定目录下的json数据
 	tempBulkData := []elasticsearch.BulkData{}
 	tempIndexs := make(map[string]int, 0)
+	count := 0
 	filepath.Walk(param.Path, func(path string, info os.FileInfo, err error) error {
 		// 只读取json文件
 		if !strings.HasSuffix(path, ".json") {
@@ -152,6 +103,29 @@ func Update(ctx *gin.Context) {
 			Index: constant.IndexNameInstrument,
 			Id:    tempInstrument.InstrumentId,
 		})
+
+		// 分批次写入，避免内存占用太多panic
+		count = count + 1
+		if (count % 5000) == 0 {
+			// 遍历所有年份索引表，创建之前不存在的年份表
+			indexs := []string{}
+			for key, _ := range tempIndexs {
+				indexs = append(indexs, key)
+			}
+			if err := createAllIndex(indexs); err != nil {
+				errMsg := fmt.Errorf("创建索引表失败, indexs:", indexs, "err:", err)
+				return errMsg
+			}
+
+			// 批量写入es
+			if err := GetEsHandler().BulkInsert(tempBulkData); err != nil {
+				errMsg := fmt.Errorf("批量写入es错误, err:", err)
+				return errMsg
+			}
+
+			tempBulkData = []elasticsearch.BulkData{}
+			tempIndexs = make(map[string]int, 0)
+		}
 
 		return nil
 	})

@@ -161,3 +161,14 @@ func TestGetQueryAggs(t *testing.T) {
 
 	fmt.Println("aggsOutput:", aggsOutput)
 }
+
+func TestCleanEs(t *testing.T) {
+	esConf := &conf.ElasticSearchConf{
+		Addresses: []string{"http://127.0.0.1:9200"},
+	}
+	esHandler, err := NewEsHandler(esConf)
+	assert.Nil(t, nil, err, "es初始化失败")
+
+	res, _ := esHandler.client.IndexNames()
+	fmt.Println("res:", res)
+}

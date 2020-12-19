@@ -40,17 +40,21 @@ func main() {
 	// 启动监听服务
 	config := conf.GetConfig()
 	r := gin.Default()
+
+	// 加载页面内容
 	r.LoadHTMLGlob("./html/template/*")
 	r.StaticFS("/assets", http.Dir("./html/assets"))
-
 	r.GET("/login", LoginPage)
 	r.GET("/home", HomePage)
 	r.GET("/content", ContentPage)
 
+	// api接口
 	r.GET("/api/queryByCondition", logic.QueryByCondition)
+	r.GET("/api/queryCount", logic.SuperQueryCount)
 	r.GET("/api/query", logic.Query)
 	r.GET("/api/update", logic.Update)
 	r.GET("/api/getFullText", logic.GetFullText)
+	r.GET("/api/operation", logic.ElasticOperation)
 
 	//r.Use(func(ctx *gin.Context) {
 	//	ctx.Header("Access-Control-Allow-Origin", "*")

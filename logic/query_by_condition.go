@@ -39,6 +39,12 @@ type QueryRes struct {
 	JudgeArgument []JudgeArgument `form:"judgeArgument"`
 }
 
+// 常用法条信息
+type InuseLawInfo struct {
+	Data    string  `form:"Data"`
+	UseRate float64 `form:"useRate"`
+}
+
 // 法官意见
 type JudgeArgument struct {
 	Data   string `form:"data"`
@@ -73,14 +79,15 @@ func QueryByCondition(ctx *gin.Context) {
 	// 构造查询
 	indexName, err := getIndex(param.TrialYear)
 	if err != nil {
-		status := fmt.Sprintf("QueryByCondition输入参数错误，审理年份非法:", param.TrialYear, "err:", err)
+		status = fmt.Sprintf("QueryByCondition输入参数错误，审理年份非法:", param.TrialYear, "err:", err)
 		fmt.Println(status)
 		return
 	}
 	filters := getFilters(param)
 	aggsMap := make(map[string]es.Aggregation)
-	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", "1.0"))
-	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", "2.0"))
+	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", constant.WinString))
+	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", constant.LoseString))
+	aggsMap["inuselaw_count"] = es.NewTermsAggregation().Field("InuseLaw")
 
 	// 查询es
 	searchResult, err := GetEsHandler().BoolQuery(indexName,
@@ -88,7 +95,7 @@ func QueryByCondition(ctx *gin.Context) {
 		aggsMap,
 		filters...)
 	if err != nil {
-		status := fmt.Sprintf("QueryByCondition查询返回错误, err:", err)
+		status = fmt.Sprintf("QueryByCondition查询返回错误, err:", err)
 		fmt.Println(status)
 		return
 	}
@@ -136,27 +143,27 @@ func getFilters(param *QueryByConditionReq) []es.Query {
 	if param.Defendant != "" {
 		//被告
 		query = append(query,
-			es.NewMatchQuery("Defendants", param.Defendant))
+			es.NewMatchPhraseQuery("Defendants", param.Defendant))
 	}
 	if param.Plaintiff != "" {
 		// 原告
 		query = append(query,
-			es.NewMatchQuery("Plaintiffs", param.Plaintiff))
+			es.NewMatchPhraseQuery("Plaintiffs", param.Plaintiff))
 	}
 	if param.TrialJudge != "" {
 		//审理法官
 		query = append(query,
-			es.NewMatchQuery("TrialJudge", param.TrialJudge))
+			es.NewMatchPhraseQuery("TrialJudge", param.TrialJudge))
 	}
 	if param.TrialArea != "" {
 		// 审理地区
 		query = append(query,
-			es.NewMatchQuery("TrialArea", param.TrialArea))
+			es.NewMatchPhraseQuery("TrialArea", param.TrialArea))
 	}
 	if param.TrialCourt != "" {
 		// 审理法院，精确值
 		query = append(query,
-			es.NewMatchQuery("TrialCourt", param.TrialCourt))
+			es.NewMatchPhraseQuery("TrialCourt", param.TrialCourt))
 	}
 	if param.DisputeFocus != "" {
 		// 争议焦点，模糊匹配
@@ -170,8 +177,9 @@ func getFilters(param *QueryByConditionReq) []es.Query {
 
 // 处理查询数据
 func aggregateData(searchResult *es.SearchResult) *QueryRes {
+	var winRate float64 = 0
 	queryRes := &QueryRes{
-		WinRate: 0,
+		WinRate: winRate,
 	}
 
 	// 胜诉概率
@@ -182,11 +190,19 @@ func aggregateData(searchResult *es.SearchResult) *QueryRes {
 		LoseCount struct {
 			DocCount int `json:"doc_count"`
 		} `json:"lose_count"`
+		InuselawCount struct {
+			Buckets []struct {
+				Key      string `json:"key"`
+				DocCount int    `json:"doc_count"`
+			} `json:"buckets"`
+		} `json:"inuselaw_count"`
 	}{}
 	if err := GetEsHandler().GetQueryAggs(aggsOutput, searchResult); err != nil {
 		return queryRes
 	}
-	winRate := float64(aggsOutput.WinCount.DocCount) / float64(aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
+	if aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount != 0 {
+		winRate = float64(aggsOutput.WinCount.DocCount) / float64(aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
+	}
 	fmt.Println("number:", aggsOutput.WinCount.DocCount, aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
 
 	// 证据建议、常用法条、法官意见
@@ -197,18 +213,37 @@ func aggregateData(searchResult *es.SearchResult) *QueryRes {
 		return queryRes
 	}
 	tempEvidences := []string{}
-	tempInuseLaws := []string{}
 	tempJudgeArguments := []JudgeArgument{}
+	count := 0
 	fmt.Println("hits:", hits, hits.([]*EsDataControversy))
 	for _, val := range hits.([]*EsDataControversy) {
 		fmt.Println("es query_controversy data:", *val)
+		// 法官意见为空时，抛弃该内容
+		if len(val.JudgeArgument) == 0 {
+			fmt.Println("法官意见为空，该数据抛弃")
+			continue
+		}
+
 		tempEvidences = append(tempEvidences, val.Evidence...)
-		tempInuseLaws = append(tempInuseLaws, val.InuseLaw...)
-		tempJudgeArguments = append(tempJudgeArguments,
-			JudgeArgument{
-				//Data:   val.JudgeArgument,
+		//tempInuseLaws = append(tempInuseLaws, val.InuseLaw...)
+		for _, judgeContent := range val.JudgeArgument {
+			temp := JudgeArgument{
+				Data:   judgeContent,
 				TextId: val.InstrumentId,
-			})
+			}
+			tempJudgeArguments = append(tempJudgeArguments, temp)
+		}
+
+		count = count + 1
+		if count >= 10 {
+			break
+		}
+	}
+
+	totalLaw := 0
+	tempInuseLaws := []string{}
+	for _, lawInfo := range aggsOutput.InuselawCount.Buckets {
+		totalLaw = totalLaw + lawInfo.DocCount
 	}
 
 	queryRes = &QueryRes{
@@ -239,9 +274,15 @@ func RemoveRepeat(src []string) []string {
 
 // 框架返回rsp参数
 func GinReturn(ctx *gin.Context, rsp interface{}) {
-	tempByte, _ := json.Marshal(rsp)
+	tempByte, err := json.Marshal(rsp)
+	if err != nil {
+		fmt.Println("gin return-marshal fail, err:", err)
+	}
 	rspMap := gin.H{}
-	json.Unmarshal(tempByte, &rspMap)
+	err = json.Unmarshal(tempByte, &rspMap)
+	if err != nil {
+		fmt.Println("gin return-unmarshal fail, err:", err)
+	}
 
 	ctx.JSON(200, rspMap)
 }

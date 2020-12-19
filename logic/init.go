@@ -6,6 +6,8 @@ import (
 	"LegalSearch/constant"
 	"LegalSearch/database/elasticsearch"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"os"
 )
 
 var (
@@ -32,4 +34,35 @@ func InitEsHandler() error {
 	}
 
 	return nil
+}
+
+type OperationReq struct {
+	Action string `form:"action"`
+}
+type OperationRsp struct {
+	Msg string `form:"msg"`
+}
+
+func ElasticOperation(ctx *gin.Context) {
+	param := new(OperationReq)
+	if err := ctx.ShouldBind(param); err != nil {
+		return
+	}
+	fmt.Println("operation input:", param)
+
+	rsp := OperationRsp{}
+	switch param.Action {
+	case "clean":
+		GetEsHandler().CleanEsIndex()
+		GinReturn(ctx, OperationRsp{
+			Msg: "delete es data",
+		})
+		os.Exit(0)
+
+	case "list":
+		indexs := GetEsHandler().GetIndexs()
+		rsp.Msg = indexs
+	}
+
+	GinReturn(ctx, rsp)
 }

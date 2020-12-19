@@ -7,7 +7,7 @@ const (
 	// 排序方式，降序排序
 	SortOrder = false
 	// 排序后返回的查询数量
-	SortSize = 10
+	SortSize = 500
 )
 
 // es索引设置
@@ -81,7 +81,7 @@ const (
 			"InstrumentId": {
 				"type": "keyword"
 			},
-			"Content": {
+			"wenshu_content": {
 				"type": "text",
 				"analyzer": "ik_max_word"
 			},
@@ -208,4 +208,9 @@ const (
 	}
 }
 `
+)
+
+const (
+	WinString  = "1"
+	LoseString = "0"
 )

@@ -247,3 +247,22 @@ func (p *EsHandler) GetQueryAggs(aggsOutput interface{},
 
 	return nil
 }
+
+func (p *EsHandler) CleanEsIndex() {
+	client := p.client
+
+	indexs, _ := client.IndexNames()
+	client.DeleteIndex(indexs...).Do(context.Background())
+}
+
+func (p *EsHandler) GetIndexs() string {
+	client := p.client
+	res := ""
+
+	indexs, _ := client.IndexNames()
+	for _, index := range indexs {
+		res = res + index + "; "
+	}
+
+	return res
+}

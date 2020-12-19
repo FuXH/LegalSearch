@@ -16,6 +16,7 @@ type QueryReq struct {
 
 // 模糊搜索
 func Query(ctx *gin.Context) {
+	fmt.Println("query")
 	startTime := time.Now()
 	status := "success"
 	defer func() {
@@ -39,7 +40,7 @@ func Query(ctx *gin.Context) {
 	}
 	fmt.Println("query input:", param)
 	if param.SearchParam == "" {
-		status := fmt.Sprintf("query输入参数为空")
+		status = fmt.Sprintf("query输入参数为空")
 		fmt.Println(status)
 		return
 	}
@@ -48,12 +49,12 @@ func Query(ctx *gin.Context) {
 	indexName := constant.IndexNameInstrument
 	filters := getFuzzFilter(param)
 	aggsMap := make(map[string]es.Aggregation)
-	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", 1))
-	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", 2))
+	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.WinString))
+	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.LoseString))
 
 	// 查询es
 	searchResult, err := GetEsHandler().BoolQuery(indexName,
-		constant.SortField, constant.SortOrder, constant.SortSize,
+		"", constant.SortOrder, constant.SortSize,
 		aggsMap,
 		filters...)
 	if err != nil {
@@ -79,15 +80,16 @@ func getFuzzFilter(req *QueryReq) []es.Query {
 
 	if req.SearchParam != "" {
 		query = append(query,
-			es.NewMatchQuery("Content", req.SearchParam))
+			es.NewMatchQuery("wenshu_content", req.SearchParam))
 	}
 
 	return query
 }
 
 func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
+	var winRate float64 = 0
 	queryRes := &QueryRes{
-		WinRate: 0,
+		WinRate: winRate,
 	}
 
 	// 胜诉概率
@@ -102,7 +104,9 @@ func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
 	if err := GetEsHandler().GetQueryAggs(aggsOutput, searchResult); err != nil {
 		return queryRes
 	}
-	winRate := float64(aggsOutput.WinCount.DocCount) / float64(aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
+	if aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount != 0 {
+		winRate = float64(aggsOutput.WinCount.DocCount) / float64(aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
+	}
 	fmt.Println("number:", aggsOutput.WinCount.DocCount, aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
 
 	// 证据建议、常用法条、法官意见
@@ -115,16 +119,31 @@ func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
 	tempEvidences := []string{}
 	tempInuseLaws := []string{}
 	tempJudgeArguments := []JudgeArgument{}
-	fmt.Println("hits:", hits, hits.([]*EsDataInstrument)[0])
+	count := 0
+
 	for _, val := range hits.([]*EsDataInstrument) {
 		for _, caseSummary := range val.Summarys {
+			if len(caseSummary.JudgeArgument) == 0 {
+				continue
+			}
+
 			tempEvidences = append(tempEvidences, caseSummary.Evidence...)
 			tempInuseLaws = append(tempInuseLaws, caseSummary.InuseLaw...)
-			tempJudgeArguments = append(tempJudgeArguments,
-				JudgeArgument{
-					//Data:   val.JudgeArgument,
+			for _, judgeContent := range caseSummary.JudgeArgument {
+				temp := JudgeArgument{
+					Data:   judgeContent,
 					TextId: val.InstrumentId,
-				})
+				}
+				tempJudgeArguments = append(tempJudgeArguments, temp)
+			}
+
+			count = count + 1
+			if count >= 10 {
+				break
+			}
+		}
+		if count >= 10 {
+			break
 		}
 	}
 
