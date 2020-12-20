@@ -118,7 +118,7 @@ func TestGetQueryHits(t *testing.T) {
 
 	data := &TestType{}
 	query := es.NewMatchPhrasePrefixQuery("name", "lip")
-	searchResult, err := esHandler.BoolQuery("test_fxh", "age", false, 3, nil, query)
+	searchResult, err := esHandler.BoolQuery([]string{"test_fxh"}, "age", false, 3, nil, query)
 	res, err := esHandler.GetQueryHits(data, searchResult)
 
 	assert.Nil(t, err, "get query hits fail")
@@ -134,7 +134,7 @@ func TestGetQueryLen(t *testing.T) {
 	esHandler, err := NewEsHandler(esConf)
 	assert.Nil(t, nil, err, "es初始化失败")
 
-	searchResult, err := esHandler.BoolQuery("*", "age", false, 3, nil)
+	searchResult, err := esHandler.BoolQuery([]string{"*"}, "age", false, 3, nil)
 	total, err := esHandler.GetQueryLen(searchResult)
 	assert.Nil(t, err, "get query len fail")
 	fmt.Println("get query len:", total)
@@ -149,7 +149,7 @@ func TestGetQueryAggs(t *testing.T) {
 
 	aggsMap := make(map[string]es.Aggregation)
 	aggsMap["agg_match"] = es.NewFilterAggregation().Filter(es.NewMatchPhraseQuery("obj.a", 123))
-	searchResult, _ := esHandler.BoolQuery("test_fxh", "age", false, 3, aggsMap)
+	searchResult, _ := esHandler.BoolQuery([]string{"test_fxh"}, "age", false, 3, aggsMap)
 
 	aggsOutput := &struct {
 		AggMatch struct {

@@ -46,7 +46,7 @@ func Query(ctx *gin.Context) {
 	}
 
 	// 构造查询
-	indexName := constant.IndexNameInstrument
+	indexName := []string{constant.IndexNameInstrument}
 	filters := getFuzzFilter(param)
 	aggsMap := make(map[string]es.Aggregation)
 	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.WinString))
@@ -117,7 +117,8 @@ func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
 		return queryRes
 	}
 	tempEvidences := []string{}
-	tempInuseLaws := []string{}
+	tempInuseLaws := []InuseLawInfo{}
+	//tempInuseLaws := []string{}
 	tempJudgeArguments := []JudgeArgument{}
 	count := 0
 
@@ -128,8 +129,20 @@ func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
 			}
 
 			tempEvidences = append(tempEvidences, caseSummary.Evidence...)
-			tempInuseLaws = append(tempInuseLaws, caseSummary.InuseLaw...)
+			//tempInuseLaws = append(tempInuseLaws, caseSummary.InuseLaw...)
+			for _, lawInfo := range caseSummary.InuseLaw {
+				//tempInuseLaws = append(tempInuseLaws, lawInfo)
+				tempInuseLaws = append(tempInuseLaws, InuseLawInfo{
+					Data:    lawInfo,
+					UseRate: 0,
+				})
+			}
 			for _, judgeContent := range caseSummary.JudgeArgument {
+				// 仅展示法官意见为胜诉的案件
+				//if caseSummary.IsWin != constant.WinString {
+				//	continue
+				//}
+
 				temp := JudgeArgument{
 					Data:   judgeContent,
 					TextId: val.InstrumentId,

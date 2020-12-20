@@ -22,7 +22,7 @@ const (
     "mappings": {
 		"dynamic": "false",
 		"properties": {
-			"InstrumentId": {
+			"WenshuId": {
 				"type": "keyword"
 			},
 			"Defendants": {
@@ -42,7 +42,8 @@ const (
 				"format": "yyyy-MM-dd"
 			},
 			"TrialArea": {
-				"type": "keyword"
+				"type": "text",
+				"analyzer": "ik_smart"
 			},
 			"TrialCourt": {
 				"type": "text",

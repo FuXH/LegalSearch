@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"LegalSearch/constant"
@@ -33,16 +34,17 @@ type ApiQueryRsp struct {
 
 // 搜索的数据查询结果
 type QueryRes struct {
-	WinRate       float64         `form:"winRate"`
-	Evidence      []string        `form:"evidence"`
-	InuseLaw      []string        `form:"inuseLaw"`
+	WinRate  float64  `form:"winRate"`
+	Evidence []string `form:"evidence"`
+	//InuseLaw []string `form:"inuseLaw"`
+	InuseLaw      []InuseLawInfo  `form:"inuseLaw"`
 	JudgeArgument []JudgeArgument `form:"judgeArgument"`
 }
 
 // 常用法条信息
 type InuseLawInfo struct {
 	Data    string  `form:"Data"`
-	UseRate float64 `form:"useRate"`
+	UseRate float64 `json:"useRate"`
 }
 
 // 法官意见
@@ -114,26 +116,30 @@ func QueryByCondition(ctx *gin.Context) {
 }
 
 // 根据年份获取对应索引表
-func getIndex(trailYear string) (string, error) {
+func getIndex(trailYear string) ([]string, error) {
 	// 未指定年份，则搜索所有索引表
 	if trailYear == "" {
-		return "*", nil
+		return []string{"*"}, nil
 	}
 
-	// 输入年份不为数字
-	year, err := strconv.Atoi(trailYear)
-	if err != nil {
-		return "", err
+	resIndexs := []string{}
+	splitYears := strings.Split(trailYear, ",")
+	for _, strYear := range splitYears {
+		// 输入年份不为数字
+		year, err := strconv.Atoi(strYear)
+		if err != nil {
+			return []string{""}, err
+		}
+		resIndexs = append(resIndexs, fmt.Sprintf("trial_year_%d", year))
 	}
-	indexName := fmt.Sprintf("trial_year_%d", year)
 
 	// 索引不存在
-	if exist := GetEsHandler().IsExistIndex(indexName); !exist {
-		return "", fmt.Errorf("索引不存在, index:", indexName)
+	if exist := GetEsHandler().IsExistIndex(resIndexs); !exist {
+		return []string{""}, fmt.Errorf("索引不存在, indexs:", resIndexs)
 	}
 
-	fmt.Println("index_name:", indexName)
-	return indexName, nil
+	fmt.Println("index_name:", resIndexs)
+	return resIndexs, nil
 }
 
 // 创建筛选
@@ -157,8 +163,15 @@ func getFilters(param *QueryByConditionReq) []es.Query {
 	}
 	if param.TrialArea != "" {
 		// 审理地区
+		splitArea := strings.Split(param.TrialArea, ",")
+		tempQuery := []es.Query{}
+		for _, area := range splitArea {
+			tempQuery = append(tempQuery, es.NewMatchPhrasePrefixQuery("TrialCourt", area))
+		}
 		query = append(query,
-			es.NewMatchPhraseQuery("TrialArea", param.TrialArea))
+			es.NewBoolQuery().MinimumNumberShouldMatch(1).Should(tempQuery...))
+		//query = append(query,
+		//	es.NewMatchPhrasePrefixQuery("TrialCourt", param.TrialArea))
 	}
 	if param.TrialCourt != "" {
 		// 审理法院，精确值
@@ -227,9 +240,14 @@ func aggregateData(searchResult *es.SearchResult) *QueryRes {
 		tempEvidences = append(tempEvidences, val.Evidence...)
 		//tempInuseLaws = append(tempInuseLaws, val.InuseLaw...)
 		for _, judgeContent := range val.JudgeArgument {
+			// 仅展示法官意见为支持的案件
+			//if val.IsWin != constant.WinString {
+			//	continue
+			//}
+
 			temp := JudgeArgument{
 				Data:   judgeContent,
-				TextId: val.InstrumentId,
+				TextId: val.WenshuId,
 			}
 			tempJudgeArguments = append(tempJudgeArguments, temp)
 		}
@@ -241,9 +259,24 @@ func aggregateData(searchResult *es.SearchResult) *QueryRes {
 	}
 
 	totalLaw := 0
-	tempInuseLaws := []string{}
+	//tempInuseLaws := []string{}
+	tempInuseLaws := []InuseLawInfo{}
 	for _, lawInfo := range aggsOutput.InuselawCount.Buckets {
 		totalLaw = totalLaw + lawInfo.DocCount
+	}
+	count = 0
+	for _, lawInfo := range aggsOutput.InuselawCount.Buckets {
+		temp := InuseLawInfo{
+			Data:    lawInfo.Key,
+			UseRate: float64(lawInfo.DocCount) / float64(totalLaw),
+		}
+		tempInuseLaws = append(tempInuseLaws, temp)
+		//tempInuseLaws = append(tempInuseLaws, lawInfo.Key)
+
+		count = count + 1
+		if count >= 10 {
+			break
+		}
 	}
 
 	queryRes = &QueryRes{

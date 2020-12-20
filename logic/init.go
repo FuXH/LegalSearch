@@ -27,7 +27,7 @@ func InitEsHandler() error {
 	}
 	EsHandler = temp
 
-	if !EsHandler.IsExistIndex(constant.IndexNameInstrument) {
+	if !EsHandler.IsExistIndex([]string{constant.IndexNameInstrument}) {
 		if err := EsHandler.CreateIndex(constant.IndexNameInstrument, constant.IndexMappingsInstrument); err != nil {
 			return fmt.Errorf("创建instrument索引表失败, err:", err)
 		}

@@ -170,14 +170,14 @@ func legalDocToEsData(legalDoc *LegalDoc) []EsDataControversy {
 	}
 	for _, val := range legalDoc.Summarys {
 		temp := EsDataControversy{
-			InstrumentId: legalDoc.InstrumentId, // 原文id
-			Defendants:   defendants,            // 被告
-			Plaintiffs:   plaintiffs,            // 原告
-			TrialJudge:   legalDoc.TrialJudge,   // 法官
-			TrialCourt:   legalDoc.TrialCourt,   // 审理法院
-			TrialYear:    legalDoc.TrialYear,    // 审理年份
-			TrialArea:    legalDoc.TrialArea,    // 审理地区
-			TrialTime:    legalDoc.TrialTime,    // 审理时间
+			WenshuId:   legalDoc.InstrumentId, // 原文id
+			Defendants: defendants,            // 被告
+			Plaintiffs: plaintiffs,            // 原告
+			TrialJudge: legalDoc.TrialJudge,   // 法官
+			TrialCourt: legalDoc.TrialCourt,   // 审理法院
+			TrialYear:  legalDoc.TrialYear,    // 审理年份
+			TrialArea:  legalDoc.TrialArea,    // 审理地区
+			TrialTime:  legalDoc.TrialTime,    // 审理时间
 
 			DisputeFocus:  val.DisputeFocus,  // 争议焦点
 			IsWin:         val.IsWin,         // 是否胜诉
@@ -193,7 +193,7 @@ func legalDocToEsData(legalDoc *LegalDoc) []EsDataControversy {
 // createAllIndex
 func createAllIndex(indexs []string) error {
 	for _, index := range indexs {
-		if GetEsHandler().IsExistIndex(index) {
+		if GetEsHandler().IsExistIndex([]string{index}) {
 			continue
 		}
 

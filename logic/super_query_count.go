@@ -48,6 +48,8 @@ func SuperQueryCount(ctx *gin.Context) {
 	aggsMap := make(map[string]es.Aggregation)
 	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", constant.WinString))
 	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", constant.LoseString))
+	aggsMap["counts"] = es.NewTermsAggregation().Field("IsWin")
+	aggsMap["counts_id"] = es.NewCardinalityAggregation().Field("WenshuId")
 
 	// 查询es
 	searchResult, err := GetEsHandler().BoolQuery(indexName,
@@ -80,10 +82,27 @@ func aggregateLen(searchResult *es.SearchResult) int {
 		LoseCount struct {
 			DocCount int `json:"doc_count"`
 		} `json:"lose_count"`
+		Counts struct {
+			Buckets []struct {
+				Key      string `json:"key"`
+				DocCount int    `json:"doc_count"`
+			} `json:"buckets"`
+		} `json:"counts"`
+		CountsId struct {
+			Value int `json:"value"`
+		} `json:"counts_id"`
 	}{}
 	if err := GetEsHandler().GetQueryAggs(aggsOutput, searchResult); err != nil {
 		return 0
 	}
 
-	return aggsOutput.WinCount.DocCount + aggsOutput.LoseCount.DocCount
+	total := 0
+	for _, val := range aggsOutput.Counts.Buckets {
+		total = total + val.DocCount
+	}
+	fmt.Println("total:", total, " win_count:", aggsOutput.WinCount.DocCount, " lose_count:", aggsOutput.LoseCount.DocCount)
+
+	fmt.Println("total_2:", aggsOutput.CountsId.Value)
+
+	return aggsOutput.CountsId.Value
 }

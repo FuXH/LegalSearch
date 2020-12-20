@@ -67,9 +67,9 @@ func (p *EsHandler) CreateIndex(index string, mappings string) error {
 }
 
 // 索引是否存在
-func (p *EsHandler) IsExistIndex(index string) bool {
+func (p *EsHandler) IsExistIndex(indexs []string) bool {
 	client := p.client
-	exist, err := client.IndexExists(index).Do(context.Background())
+	exist, err := client.IndexExists(indexs...).Do(context.Background())
 	if err != nil {
 		return false
 	}
@@ -176,7 +176,7 @@ func (p *EsHandler) QueryById(index string, id string, out interface{}) error {
 // order: true-升序排序，false-降序排序
 // size: 查询结果返回的最大数量
 // aggs: 聚合统计的条件
-func (p *EsHandler) BoolQuery(index string,
+func (p *EsHandler) BoolQuery(index []string,
 	sortField string, order bool, size int,
 	aggs map[string]es.Aggregation,
 	filters ...es.Query) (*es.SearchResult, error) {
@@ -184,7 +184,7 @@ func (p *EsHandler) BoolQuery(index string,
 
 	// match
 	searchService := client.Search().
-		Index(index).
+		Index(index...).
 		Pretty(true)
 	if sortField != "" {
 		searchService = searchService.Sort(sortField, order)

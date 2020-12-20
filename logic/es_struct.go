@@ -2,7 +2,7 @@ package logic
 
 // es存储的结构体，争议焦点索引表
 type EsDataControversy struct {
-	InstrumentId  string   `json:"wenshu_id_2"`   // 法律文书的id
+	WenshuId      string   `json:"WenshuId"`      // 法律文书的id
 	Defendants    []string `json:"Defendants"`    // 被告
 	Plaintiffs    []string `json:"Plaintiffs"`    // 原告
 	TrialJudge    string   `json:"TrialJudge"`    // 审理法官
