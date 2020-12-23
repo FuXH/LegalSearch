@@ -24,7 +24,7 @@ type EsDataInstrument struct {
 	CaseId       string    `json:"case_id"`        // 案件号
 	Cause        string    `json:"cause"`          // 纠纷原因
 	CaseType     string    `json:"case_type"`      // 案件类型
-	Summarys     []Summary `json:"case_summary"`   // 概要
+	CaseSummary  []Summary `json:"case_summary"`   // 概要
 	// 费用相关
 	FeeMedical     FeeInfo `json:"fee_medical"`
 	FeeMess        FeeInfo `json:"fee_mess"`

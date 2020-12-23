@@ -208,6 +208,38 @@ func (p *EsHandler) BoolQuery(index []string,
 	return searchResult, nil
 }
 
+func (p *EsHandler) BoolShouldQuery(index []string,
+	sortField string, order bool, size int,
+	aggs map[string]es.Aggregation,
+	shouldNumber int, shouldFilters ...es.Query) (*es.SearchResult, error) {
+	client := p.client
+
+	// match
+	searchService := client.Search().
+		Index(index...).
+		Pretty(true)
+	if sortField != "" {
+		searchService = searchService.Sort(sortField, order)
+	}
+	if size != 0 {
+		searchService = searchService.Size(size)
+	}
+	// aggs
+	for key, val := range aggs {
+		searchService = searchService.Aggregation(key, val)
+	}
+	// filters
+	boolQuery := es.NewBoolQuery().Should(shouldFilters...).MinimumNumberShouldMatch(shouldNumber)
+	searchService = searchService.Query(boolQuery)
+
+	searchResult, err := searchService.Do(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	return searchResult, nil
+}
+
 // GetQueryHits 获取查询的数据
 // outType: 查询数据的结构体指针
 // 返回值: 查询数据的数组

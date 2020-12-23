@@ -44,7 +44,7 @@ type PlaintiffInfo struct {
 }
 type Summary struct {
 	DisputeFocus  string   `json:"controversy"` // 争议焦点
-	IsWin         string   `json:"judgement"`   // 是否胜诉
+	Judgement     string   `json:"judgement"`   // 是否胜诉
 	InuseLaw      []string `json:"basis"`       // 常用法条
 	JudgeArgument []string `json:"cause"`       // 法官观点
 	Evidence      []string `json:"evidence"`    // 证据建议

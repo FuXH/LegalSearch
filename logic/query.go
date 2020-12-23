@@ -49,8 +49,9 @@ func Query(ctx *gin.Context) {
 	indexName := []string{constant.IndexNameInstrument}
 	filters := getFuzzFilter(param)
 	aggsMap := make(map[string]es.Aggregation)
-	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.WinString))
-	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.LoseString))
+	aggsMap["terms_id"] = es.NewTermsAggregation().Field("wenshu_id_2")
+	//aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.WinString))
+	//aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("case_summary.judgement", constant.LoseString))
 
 	// 查询es
 	searchResult, err := GetEsHandler().BoolQuery(indexName,
@@ -63,8 +64,16 @@ func Query(ctx *gin.Context) {
 		return
 	}
 
-	// 处理返回数据
-	queryRes := aggregateFuzzQueryData(searchResult)
+	// 获取匹配的案件id
+	matchIds, err := getMatchInstrumentIds(searchResult)
+	if err != nil {
+		status = fmt.Sprintf("获取匹配的案件id失败, err:", err)
+		fmt.Println(status)
+		return
+	}
+
+	// 获取案件id对应的返回数据
+	queryRes := getMatchControversyInfo(matchIds)
 
 	rsp := &ApiQueryRsp{
 		Success:   true,
@@ -86,86 +95,133 @@ func getFuzzFilter(req *QueryReq) []es.Query {
 	return query
 }
 
-func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
-	var winRate float64 = 0
-	queryRes := &QueryRes{
-		WinRate: winRate,
-	}
+func getMatchInstrumentIds(searchResult *es.SearchResult) ([]string, error) {
+	resMatchIds := []string{}
 
-	// 胜诉概率
 	aggsOutput := &struct {
-		WinCount struct {
-			DocCount int `json:"doc_count"`
-		} `json:"win_count"`
-		LoseCount struct {
-			DocCount int `json:"doc_count"`
-		} `json:"lose_count"`
+		TermsId struct {
+			Buckets []struct {
+				Key      string `json:"key"`
+				DocCount int    `json:"doc_count"`
+			} `json:"buckets"`
+		} `json:"terms_id"`
 	}{}
 	if err := GetEsHandler().GetQueryAggs(aggsOutput, searchResult); err != nil {
-		return queryRes
-	}
-	if aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount != 0 {
-		winRate = float64(aggsOutput.WinCount.DocCount) / float64(aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
-	}
-	fmt.Println("number:", aggsOutput.WinCount.DocCount, aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
-
-	// 证据建议、常用法条、法官意见
-	// 根据匹配查询后，展示时间最近的10条数据
-	outType := &EsDataInstrument{}
-	hits, err := GetEsHandler().GetQueryHits(outType, searchResult)
-	if err != nil {
-		return queryRes
-	}
-	tempEvidences := []string{}
-	tempInuseLaws := []InuseLawInfo{}
-	//tempInuseLaws := []string{}
-	tempJudgeArguments := []JudgeArgument{}
-	count := 0
-
-	for _, val := range hits.([]*EsDataInstrument) {
-		for _, caseSummary := range val.Summarys {
-			if len(caseSummary.JudgeArgument) == 0 {
-				continue
-			}
-
-			tempEvidences = append(tempEvidences, caseSummary.Evidence...)
-			//tempInuseLaws = append(tempInuseLaws, caseSummary.InuseLaw...)
-			for _, lawInfo := range caseSummary.InuseLaw {
-				//tempInuseLaws = append(tempInuseLaws, lawInfo)
-				tempInuseLaws = append(tempInuseLaws, InuseLawInfo{
-					Data:    lawInfo,
-					UseRate: 0,
-				})
-			}
-			for _, judgeContent := range caseSummary.JudgeArgument {
-				// 仅展示法官意见为胜诉的案件
-				//if caseSummary.IsWin != constant.WinString {
-				//	continue
-				//}
-
-				temp := JudgeArgument{
-					Data:   judgeContent,
-					TextId: val.InstrumentId,
-				}
-				tempJudgeArguments = append(tempJudgeArguments, temp)
-			}
-
-			count = count + 1
-			if count >= 10 {
-				break
-			}
-		}
-		if count >= 10 {
-			break
-		}
+		return resMatchIds, err
 	}
 
-	queryRes = &QueryRes{
-		WinRate:       winRate,
-		Evidence:      tempEvidences,
-		InuseLaw:      tempInuseLaws,
-		JudgeArgument: tempJudgeArguments,
+	for _, val := range aggsOutput.TermsId.Buckets {
+		resMatchIds = append(resMatchIds, val.Key)
 	}
-	fmt.Println("res:", *queryRes)
-	return queryRes
+
+	return resMatchIds, nil
 }
+
+func getMatchControversyInfo(matchIds []string) *QueryRes {
+	indexName := []string{"trial_year_*"}
+	filters := []es.Query{}
+	for _, id := range matchIds {
+		filters = append(filters,
+			es.NewTermQuery("WenshuId", id))
+	}
+	aggsMap := make(map[string]es.Aggregation)
+	aggsMap["win_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", constant.WinString))
+	aggsMap["lose_count"] = es.NewFilterAggregation().Filter(es.NewTermQuery("IsWin", constant.LoseString))
+	aggsMap["inuselaw_count"] = es.NewTermsAggregation().Field("InuseLaw")
+
+	// 查询es
+	searchResult, err := GetEsHandler().BoolShouldQuery(indexName,
+		"", constant.SortOrder, constant.SortSize,
+		aggsMap,
+		1, filters...)
+	if err != nil {
+		fmt.Println("模糊查询第二次失败, err:", err)
+		return nil
+	}
+
+	return aggregateData(searchResult)
+}
+
+//func aggregateFuzzQueryData(searchResult *es.SearchResult) *QueryRes {
+//	var winRate float64 = 0
+//	queryRes := &QueryRes{
+//		WinRate: winRate,
+//	}
+//
+//	// 胜诉概率
+//	aggsOutput := &struct {
+//		WinCount struct {
+//			DocCount int `json:"doc_count"`
+//		} `json:"win_count"`
+//		LoseCount struct {
+//			DocCount int `json:"doc_count"`
+//		} `json:"lose_count"`
+//	}{}
+//	if err := GetEsHandler().GetQueryAggs(aggsOutput, searchResult); err != nil {
+//		return queryRes
+//	}
+//	if aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount != 0 {
+//		winRate = float64(aggsOutput.WinCount.DocCount) / float64(aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
+//	}
+//	fmt.Println("number:", aggsOutput.WinCount.DocCount, aggsOutput.WinCount.DocCount+aggsOutput.LoseCount.DocCount)
+//
+//	// 证据建议、常用法条、法官意见
+//	// 根据匹配查询后，展示时间最近的10条数据
+//	outType := &EsDataInstrument{}
+//	hits, err := GetEsHandler().GetQueryHits(outType, searchResult)
+//	if err != nil {
+//		return queryRes
+//	}
+//	tempEvidences := []string{}
+//	tempInuseLaws := []InuseLawInfo{}
+//	//tempInuseLaws := []string{}
+//	tempJudgeArguments := []JudgeArgument{}
+//	count := 0
+//
+//	for _, val := range hits.([]*EsDataInstrument) {
+//		for _, caseSummary := range val.CaseSummary {
+//			if len(caseSummary.JudgeArgument) == 0 {
+//				continue
+//			}
+//
+//			tempEvidences = append(tempEvidences, caseSummary.Evidence...)
+//			//tempInuseLaws = append(tempInuseLaws, caseSummary.InuseLaw...)
+//			for _, lawInfo := range caseSummary.InuseLaw {
+//				//tempInuseLaws = append(tempInuseLaws, lawInfo)
+//				tempInuseLaws = append(tempInuseLaws, InuseLawInfo{
+//					Data:    lawInfo,
+//					UseRate: 0,
+//				})
+//			}
+//			for _, judgeContent := range caseSummary.JudgeArgument {
+//				// 仅展示法官意见为胜诉的案件
+//				//if caseSummary.IsWin != constant.WinString {
+//				//	continue
+//				//}
+//
+//				temp := JudgeArgument{
+//					Data:   judgeContent,
+//					TextId: val.InstrumentId,
+//				}
+//				tempJudgeArguments = append(tempJudgeArguments, temp)
+//			}
+//
+//			count = count + 1
+//			if count >= 10 {
+//				break
+//			}
+//		}
+//		if count >= 10 {
+//			break
+//		}
+//	}
+//
+//	queryRes = &QueryRes{
+//		WinRate:       winRate,
+//		Evidence:      tempEvidences,
+//		InuseLaw:      tempInuseLaws,
+//		JudgeArgument: tempJudgeArguments,
+//	}
+//	fmt.Println("res:", *queryRes)
+//	return queryRes
+//}

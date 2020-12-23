@@ -119,7 +119,7 @@ func QueryByCondition(ctx *gin.Context) {
 func getIndex(trailYear string) ([]string, error) {
 	// 未指定年份，则搜索所有索引表
 	if trailYear == "" {
-		return []string{"*"}, nil
+		return []string{"trial_year_*"}, nil
 	}
 
 	resIndexs := []string{}
@@ -181,7 +181,7 @@ func getFilters(param *QueryByConditionReq) []es.Query {
 	if param.DisputeFocus != "" {
 		// 争议焦点，模糊匹配
 		query = append(query,
-			es.NewMatchQuery("DisputeFocus", param.DisputeFocus))
+			es.NewMatchPhraseQuery("DisputeFocus", param.DisputeFocus))
 	}
 	fmt.Println("filters:", query)
 

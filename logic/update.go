@@ -114,12 +114,14 @@ func Update(ctx *gin.Context) {
 			}
 			if err := createAllIndex(indexs); err != nil {
 				errMsg := fmt.Errorf("创建索引表失败, indexs:", indexs, "err:", err)
+				fmt.Println(errMsg)
 				return errMsg
 			}
 
 			// 批量写入es
 			if err := GetEsHandler().BulkInsert(tempBulkData); err != nil {
 				errMsg := fmt.Errorf("批量写入es错误, err:", err)
+				fmt.Println(errMsg)
 				return errMsg
 			}
 
@@ -180,7 +182,7 @@ func legalDocToEsData(legalDoc *LegalDoc) []EsDataControversy {
 			TrialTime:  legalDoc.TrialTime,    // 审理时间
 
 			DisputeFocus:  val.DisputeFocus,  // 争议焦点
-			IsWin:         val.IsWin,         // 是否胜诉
+			IsWin:         val.Judgement,     // 是否胜诉
 			InuseLaw:      val.InuseLaw,      // 法条
 			JudgeArgument: val.JudgeArgument, // 法官观点
 			Evidence:      val.Evidence,      // 证据建议

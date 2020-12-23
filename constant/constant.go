@@ -79,7 +79,7 @@ const (
 	"mappings": {
 		"dynamic": "false",
 		"properties": {
-			"InstrumentId": {
+			"wenshu_id_2": {
 				"type": "keyword"
 			},
 			"wenshu_content": {
@@ -95,12 +95,12 @@ const (
 			"CaseType": {
 				"type": "keyword"
 			},
-			"Summary": {
+			"CaseSummary": {
 				"properties": {
 					"DisputeFocus": {
 						"type": "keyword"
 					},
-					"IsWin": {
+					"Judgement": {
 						"type": "keyword"
 					},
 					"InuseLaw": {
